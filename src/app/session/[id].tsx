@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View } from 'react-native';
 import { CalendarDays, Video, MapPin, ShieldCheck, Check, X } from 'lucide-react-native';
-import { router } from 'expo-router';
-import { useLocalSearchParams } from 'expo-router';
+import { router , useLocalSearchParams } from 'expo-router';
 
 import { FeedbackSheet } from '@/components/feedback-sheet';
 import { AppText, Avatar, Button, Card, Header, Pill, Screen } from '@/components/ui';
@@ -19,7 +18,15 @@ export default function SessionScreen() {
   const match = session ? matchFor(session.matchId) : undefined;
   const partner = match ? partnerOf(match) : undefined;
 
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+    const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  useEffect(() => {
+    // Auto-open feedback when session is marked completed
+    if (session && session.status === 'completed') {
+      const timer = setTimeout(() => setFeedbackOpen(true), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [session, feedbackOpen]);
 
   if (!session || !match || !partner || !currentStudent) {
     return (
@@ -38,7 +45,7 @@ export default function SessionScreen() {
 
   const handleComplete = () => {
     setSessionStatus(session.id, 'completed');
-    setFeedbackOpen(true);
+    setFeedbackOpen(prev => !prev);
   };
 
   const handleFeedbackSubmit = (data: {
@@ -67,13 +74,6 @@ export default function SessionScreen() {
     });
     setFeedbackOpen(false);
   };
-
-  useEffect(() => {
-    // Auto-open feedback when session is marked completed from another source
-    if (session.status === 'completed' && !feedbackOpen) {
-      setFeedbackOpen(true);
-    }
-  }, [session.status, feedbackOpen]);
 
   return (
     <Screen scroll>

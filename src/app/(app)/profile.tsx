@@ -6,18 +6,13 @@ import {
   ChevronRight,
   LogOut,
   Pencil,
-  RefreshCcw,
-  TrendingUp,
   Users,
 } from 'lucide-react-native';
-import { useState } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
-import { ConfirmDialog } from '@/components/confirm-dialog';
 import {
   AppText,
   Avatar,
-  Button,
   Card,
   Chip,
   Divider,
@@ -37,18 +32,12 @@ const KIND_LABEL: Record<SubjectKind, string> = {
 };
 
 export default function ProfileScreen() {
-  const { currentStudent, state, myMatches, signOut, switchUser, resetDemo } = useApp();
-  const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [resetOpen, setResetOpen] = useState(false);
+  const { currentStudent, state, myMatches, signOut } = useApp();
 
   if (!currentStudent) return null;
   const profile = currentStudent.profile;
   const completed = state.sessions.filter((s) => s.status === 'completed').length;
   const progress = state.learningProgress[profile.id];
-
-  const others = Object.values(state.students).filter(
-    (s) => s.profile.id !== profile.id && s.profile.verification === 'approved',
-  );
 
   return (
     <Screen scroll>
@@ -205,19 +194,6 @@ export default function ProfileScreen() {
           />
           <Divider />
           <MenuRow
-            icon={<Users size={16} color={colors.text} />}
-            label="Switch demo user"
-            caption="Test both sides of a match on one device"
-            onPress={() => setSwitcherOpen(true)}
-          />
-          <Divider />
-          <MenuRow
-            icon={<RefreshCcw size={16} color={colors.muted} />}
-            label="Reset demo data"
-            onPress={() => setResetOpen(true)}
-          />
-          <Divider />
-          <MenuRow
             icon={<LogOut size={16} color={colors.danger} />}
             label="Sign out"
             danger
@@ -237,65 +213,6 @@ export default function ProfileScreen() {
       </View>
 
       <View style={{ height: 110 }} />
-
-      <Modal
-        visible={switcherOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSwitcherOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' }}>
-          <View
-            style={{
-              backgroundColor: colors.bg,
-              borderTopLeftRadius: radius.xxl,
-              borderTopRightRadius: radius.xxl,
-              padding: space.xl,
-              gap: space.md,
-            }}>
-            <AppText variant="h2">Switch demo user</AppText>
-            <AppText variant="caption" color={colors.muted}>
-              Sign in as another seeded student to accept a request, reply, or confirm a session.
-            </AppText>
-
-            {others.map((s) => (
-              <Pressable
-                key={s.profile.id}
-                onPress={() => {
-                  switchUser(s.profile.id);
-                  setSwitcherOpen(false);
-                  router.replace('/home');
-                }}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md }}>
-                  <Avatar name={s.profile.name} color={s.profile.avatarColor} size={40} />
-                  <View style={{ flex: 1 }}>
-                    <AppText variant="h3">{s.profile.name}</AppText>
-                    <AppText variant="caption" color={colors.muted}>
-                      {s.profile.course.replace('BS ', '')} · Year {s.profile.year}
-                    </AppText>
-                  </View>
-                  <ChevronRight size={18} color={colors.border} />
-                </Card>
-              </Pressable>
-            ))}
-
-            <Button label="Cancel" variant="ghost" onPress={() => setSwitcherOpen(false)} />
-          </View>
-        </View>
-      </Modal>
-
-      <ConfirmDialog
-        visible={resetOpen}
-        title="Reset demo data?"
-        message="This clears matches, messages, sessions, blocks, and reports stored on this device."
-        confirmLabel="Reset everything"
-        danger
-        onCancel={() => setResetOpen(false)}
-        onConfirm={() => {
-          resetDemo();
-          setResetOpen(false);
-          router.replace('/welcome');
-        }}
-      />
     </Screen>
   );
 }

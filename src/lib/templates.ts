@@ -157,6 +157,218 @@ const PREFS: Record<ConversationStage, string[]> = {
   scheduled: ['sounds_good', 'works_for_me', 'see_you', 'reschedule'],
 };
 
+export interface SuggestRepliesInput {
+  messages: ChatMessage[];
+  sessions: StudySession[];
+  currentUserId?: string;
+  stage: ConversationStage;
+  hasAvailability?: boolean;
+  hasSubject?: boolean;
+  limit?: number;
+}
+
+function byKeys(keys: string[]): MessageTemplate[] {
+  const out: MessageTemplate[] = [];
+  for (const key of keys) {
+    const t = templateByKey(key);
+    if (t && !out.some((x) => x.key === t.key)) out.push(t);
+  }
+  return out;
+}
+
+function latestRelevantSession(sessions: StudySession[]): StudySession | undefined {
+  if (sessions.length === 0) return undefined;
+  const active = sessions.filter((s) => s.status === 'proposed' || s.status === 'confirmed');
+  const pool = active.length > 0 ? active : sessions;
+  return [...pool].sort((a, b) => (b.id > a.id ? 1 : -1))[0] ?? pool[pool.length - 1];
+}
+
+function fallbackReplies(input: SuggestRepliesInput): MessageTemplate[] {
+  const { stage, hasAvailability, hasSubject } = input;
+  if (stage === 'scheduled') {
+    return byKeys(['sounds_good', 'works_for_me', 'see_you', 'ready', 'reschedule', 'on_my_way', 'running_late']);
+  }
+  if (stage === 'subject') {
+    return byKeys([
+      hasAvailability ? 'my_slot' : 'when_available',
+      'schedule_session',
+      hasSubject ? 'study_subject' : 'what_study',
+      'prefer_online',
+      'prefer_in_person',
+      'sounds_good',
+      'another_time',
+    ]);
+  }
+  return byKeys(['hi', 'like_study', 'ask_subject', hasAvailability ? 'my_slot' : 'when_available', 'sounds_good', 'glad_matched']);
+}
+
+/**
+ * Rule-based, context-aware suggested replies (3-5).
+ * Considers last incoming message intent, subject/availability context, and session status.
+ * All replies are predefined templates; no AI required.
+ */
+export function suggestReplies(input: SuggestRepliesInput): MessageTemplate[] {
+  const limit = Math.max(3, Math.min(5, input.limit ?? 4));
+  const { messages, sessions, currentUserId, stage, hasAvailability = false, hasSubject = false } = input;
+  const sorted = [...messages].sort((a, b) => a.at - b.at);
+  const last = sorted[sorted.length - 1];
+  const lastIncoming = [...sorted].reverse().find((m) => !currentUserId || m.senderId !== currentUserId) ?? last;
+  const recentOwnKeys = new Set(
+    sorted.filter((m) => currentUserId && m.senderId === currentUserId).slice(-2).map((m) => m.templateKey),
+  );
+  const session = latestRelevantSession(sessions);
+  const proposedByOther = session?.status === 'proposed' && currentUserId && session.createdBy !== currentUserId;
+  const proposedByMe = session?.status === 'proposed' && currentUserId && session.createdBy === currentUserId;
+  const confirmed = session?.status === 'confirmed';
+
+  let keys: string[] = [];
+
+  const incomingKey = lastIncoming?.templateKey;
+  const incomingCat = incomingKey ? templateByKey(incomingKey)?.category : undefined;
+
+  // Intent from last incoming message takes priority (keeps replies responsive to what was just said)
+  if (lastIncoming && incomingKey) {
+    // Rescheduling / can't make
+    if (incomingKey === 'cant_make' || incomingKey === 'another_time' || incomingKey === 'reschedule' || incomingCat === 'rescheduling') {
+      keys.push(
+        hasAvailability ? 'my_slot' : 'when_available',
+        'another_time',
+        'reschedule',
+        'when_available',
+        'schedule_session',
+      );
+    }
+    // Study-together / invite intents
+    else if (incomingKey === 'would_study' || incomingKey === 'lets_study' || incomingKey === 'like_study' || incomingKey === 'happy_study' || incomingKey === 'review_together' || incomingCat === 'study_together') {
+      keys.push(
+        'happy_study',
+        'works_for_me',
+        hasSubject ? 'study_subject' : 'what_study',
+        hasAvailability ? 'my_slot' : 'when_available',
+        'another_time',
+      );
+    }
+    // Subject question / focus intents
+    else if (incomingKey === 'ask_subject' || incomingKey === 'what_study' || incomingKey === 'study_subject') {
+      keys.push(
+        hasSubject ? 'study_subject' : 'what_study',
+        'can_help_subject',
+        'help_subject',
+        hasAvailability ? 'my_slot' : 'when_available',
+        'schedule_session',
+      );
+    }
+    // Introduction / greeting
+    else if (incomingCat === 'introduction' && (incomingKey === 'hi' || incomingKey === 'glad_matched' || incomingKey === 'like_study')) {
+      keys.push('hi', 'like_study', hasSubject ? 'study_subject' : 'ask_subject', hasAvailability ? 'my_slot' : 'when_available', 'glad_matched');
+    }
+    // Help request intents
+    else if (incomingCat === 'help_request' || incomingKey === 'can_help_me' || incomingKey === 'help_subject' || incomingKey === 'need_help_topic' || incomingKey === 'difficulty' || incomingKey === 'explain_topic') {
+      keys.push('can_help_subject', 'can_help', 'can_explain', 'happy_study', hasAvailability ? 'my_slot' : 'when_available', 'schedule_session');
+    }
+    // Offering help intents
+    else if (incomingCat === 'offering_help' || incomingKey === 'can_help' || incomingKey === 'can_help_subject' || incomingKey === 'can_explain') {
+      keys.push('works_for_me', 'sounds_good', 'help_subject', hasAvailability ? 'my_slot' : 'when_available', 'schedule_session');
+    }
+    // Availability intents
+    else if (incomingCat === 'availability' || incomingKey === 'when_available' || incomingKey === 'morning' || incomingKey === 'afternoon' || incomingKey === 'evening' || incomingKey === 'my_slot') {
+      keys.push(
+        hasAvailability ? 'my_slot' : 'works_for_me',
+        'works_for_me',
+        'cant_make',
+        'another_time',
+        'schedule_session',
+      );
+    }
+    // Study mode intents
+    else if (incomingCat === 'study_mode' || incomingKey === 'prefer_online' || incomingKey === 'prefer_in_person' || incomingKey === 'either_mode') {
+      if (incomingKey === 'prefer_online') {
+        keys.push('prefer_online', 'either_mode', hasAvailability ? 'my_slot' : 'when_available', 'schedule_session', 'works_for_me');
+      } else if (incomingKey === 'prefer_in_person') {
+        keys.push('prefer_in_person', 'either_mode', hasAvailability ? 'my_slot' : 'when_available', 'schedule_session', 'works_for_me');
+      } else {
+        keys.push('either_mode', 'prefer_online', 'prefer_in_person', hasAvailability ? 'my_slot' : 'when_available', 'schedule_session');
+      }
+    }
+    // Study session intents
+    else if (incomingCat === 'study_session' || incomingKey === 'does_time_work' || incomingKey === 'schedule_session' || incomingKey === 'what_study' || incomingKey === 'running_late' || incomingKey === 'on_my_way' || incomingKey === 'thanks_session') {
+      if (incomingKey === 'does_time_work') {
+        // If someone is asking if a proposed time works, answer clearly
+        if (proposedByOther) {
+          keys.push('works_for_me', 'sounds_good', 'cant_make', 'another_time', 'reschedule');
+        } else {
+          keys.push('works_for_me', 'sounds_good', 'cant_make', 'another_time', hasAvailability ? 'my_slot' : 'when_available');
+        }
+      } else if (incomingKey === 'what_study') {
+        keys.push(hasSubject ? 'study_subject' : 'what_study', 'help_subject', 'can_help_subject', 'lets_study', 'when_available');
+      } else if (incomingKey === 'running_late' || incomingKey === 'on_my_way') {
+        keys.push('sounds_good', 'works_for_me', 'see_you', 'ready', 'another_time');
+      } else if (incomingKey === 'thanks_session') {
+        keys.push('thanks_session', 'glad_matched', 'sounds_good', 'schedule_session', 'like_study');
+      } else {
+        keys.push('schedule_session', 'works_for_me', hasAvailability ? 'my_slot' : 'when_available', hasSubject ? 'study_subject' : 'what_study', 'another_time');
+      }
+    }
+    // Confirmation intents
+    else if (incomingCat === 'confirmation' || incomingKey === 'sounds_good' || incomingKey === 'works_for_me' || incomingKey === 'see_you' || incomingKey === 'ready') {
+      if (confirmed) {
+        keys.push('see_you', 'ready', 'on_my_way', 'running_late', 'reschedule');
+      } else if (proposedByMe) {
+        keys.push('see_you', 'works_for_me', hasAvailability ? 'my_slot' : 'when_available', 'schedule_session', 'another_time');
+      } else {
+        keys.push('sounds_good', 'see_you', 'ready', hasAvailability ? 'my_slot' : 'when_available', 'schedule_session');
+      }
+    }
+  }
+
+  // Session-status driven suggestions when there is no strong incoming intent handled above
+  if (keys.length === 0) {
+    if (proposedByOther) {
+      keys.push('works_for_me', 'sounds_good', 'cant_make', 'another_time', 'reschedule');
+    } else if (proposedByMe) {
+      keys.push('see_you', 'works_for_me', hasAvailability ? 'my_slot' : 'when_available', 'another_time', 'reschedule');
+    } else if (confirmed) {
+      keys.push('see_you', 'ready', 'on_my_way', 'running_late', 'reschedule');
+    }
+  } else if (proposedByOther && incomingKey === 'does_time_work') {
+    // keep acceptance/reschedule options already chosen
+  } else if (confirmed && !['cant_make', 'another_time', 'reschedule', 'running_late', 'on_my_way'].includes(incomingKey || '')) {
+    // add light confirmed-session follow-ups after intent replies if room
+    keys.push('see_you', 'ready');
+  }
+
+  // Fallbacks and stage-based fill
+  keys.push(...fallbackReplies(input).map((t) => t.key));
+  keys.push(...primarySuggestions(stage, 8).map((t) => t.key));
+
+  // Filter unusable suggestions and dedupe
+  const out: MessageTemplate[] = [];
+  for (const key of keys) {
+    const t = templateByKey(key);
+    if (!t) continue;
+    if (out.some((x) => x.key === t.key)) continue;
+    if (t.placeholders.includes('slot') && !hasAvailability) continue;
+    if (t.placeholders.includes('session')) {
+      // session picker in UI routes to scheduling; allow it
+    }
+    if (recentOwnKeys.has(t.key) && out.length >= 2) continue;
+    out.push(t);
+    if (out.length >= limit) break;
+  }
+
+  // Ensure minimum results with safe fallbacks
+  if (out.length < 3) {
+    for (const t of fallbackReplies(input)) {
+      if (out.some((x) => x.key === t.key)) continue;
+      if (t.placeholders.includes('slot') && !hasAvailability) continue;
+      out.push(t);
+      if (out.length >= 3) break;
+    }
+  }
+
+  return out.slice(0, limit);
+}
+
 export function renderTemplate(
   text: string,
   ctx: { subjectName?: string; slotLabel?: string } = {},

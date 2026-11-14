@@ -1,15 +1,15 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { AppText, Button, Screen } from '@/components/ui';
 import { colors, radius, space } from '@/theme/tokens';
 
 const SLIDES = [
   {
-    emoji: '👋',
-    title: 'Match with study buddies',
-    body: 'Find people who share your goals. Swap what you know for what you need.',
+    emoji: '🎯',
+    title: 'Find your rhythm',
+    body: 'Match with people who share your goals. Swap what you know for what you need.',
     tint: '#E6E9FD',
   },
   {
@@ -52,7 +52,7 @@ export default function Welcome() {
             borderWidth: 1,
             borderColor: colors.border,
           }}>
-          <Text style={{ fontSize: 92 }}>{slide.emoji}</Text>
+          <AppText style={{ fontSize: 92 }}>{slide.emoji}</AppText>
         </View>
 
         <View style={{ gap: space.md }}>

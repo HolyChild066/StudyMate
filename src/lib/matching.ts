@@ -146,7 +146,8 @@ export function buildDeck(
   blocks: Block[],
 ): CandidateScore[] {
   return students
-    .filter((s) => s.profile.id !== me.profile.id)
+    .filter((s) => s.profile.id && me.profile.id && s.profile.id !== me.profile.id)
+    .filter((s) => !me.profile.email || !s.profile.email || s.profile.email.toLowerCase() !== me.profile.email.toLowerCase())
     .filter((s) => s.profile.verification === 'approved')
     .filter((s) => !hasDecided(decisions, me.profile.id, s.profile.id))
     .filter((s) => !isBlocked(blocks, me.profile.id, s.profile.id))

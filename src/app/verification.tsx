@@ -104,9 +104,9 @@ export default function Verification() {
             <Lock size={16} color={colors.muted} style={{ marginTop: 2 }} />
             <AppText variant="caption" color={colors.muted} style={{ flex: 1 }}>
               <AppText variant="caption" style={{ fontWeight: '700' }}>
-                What the badge means.{' '}
+                What the badge means.
               </AppText>
-              We check student status — not someone's character or safety. Report anything that
+              We check student status — not someone&apos;s character or safety. Report anything that
               feels wrong.
             </AppText>
           </View>

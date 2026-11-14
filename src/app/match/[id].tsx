@@ -47,7 +47,7 @@ export default function MatchScreen() {
         <Chip label="Study match" emoji="🤝" tone="success" />
 
         <AppText variant="display" align="center">
-          It's a match
+          It is a match
         </AppText>
         <AppText variant="body" color={colors.muted} align="center">
           You and {partner.profile.name.split(' ')[0]} have a few good things in common. Start with

@@ -52,7 +52,7 @@ export default function NewSessionScreen() {
 
   const dates = useMemo(() => Array.from({ length: 7 }, (_, i) => isoDate(i + 1)), []);
 
-  const subjectOptions = useMemo(() => {
+  const subjectOptions = (() => {
     if (!currentStudent || !partner) return [];
     const ids = new Set<string>();
     currentStudent.subjects.forEach((s) => ids.add(s.subjectId));
@@ -60,7 +60,7 @@ export default function NewSessionScreen() {
       if (s.kind === 'can_help') ids.add(s.subjectId);
     });
     return [...ids];
-  }, [currentStudent, partner]);
+  })();
 
   if (!match || !partner || !currentStudent) {
     return (
@@ -88,8 +88,8 @@ export default function NewSessionScreen() {
   const end = addMinutes(start, duration);
   const canConfirm = Boolean(chosenSubject) && (mode === 'online' || acknowledged);
 
-  const confirm = () => {
-    const id = createSession({
+  const confirm = async () => {
+    const id = await createSession({
       matchId: match.id,
       subjectId: chosenSubject,
       date,
@@ -98,8 +98,9 @@ export default function NewSessionScreen() {
       mode,
       safetyAcknowledged: mode === 'in_person' ? acknowledged : true,
     });
+    if (!id) return;
 
-    sendMessage(match.id, 'does_time_work', {
+    await sendMessage(match.id, 'does_time_work', {
       sessionId: id,
       subjectId: chosenSubject,
     });
@@ -256,12 +257,12 @@ export default function NewSessionScreen() {
         <Button
           label="Send session invite"
           disabled={!canConfirm}
-          onPress={() => {
+          onPress={async () => {
             if (mode === 'in_person' && !acknowledged) {
               setSafetyOpen(true);
               return;
             }
-            confirm();
+            await confirm();
           }}
         />
       </View>

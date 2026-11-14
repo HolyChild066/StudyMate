@@ -8,8 +8,8 @@ import { colors, space } from '@/theme/tokens';
 
 export default function SignIn() {
   const { signIn } = useApp();
-  const [email, setEmail] = useState('alex@northbridge.edu');
-  const [password, setPassword] = useState('demo1234');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +17,6 @@ export default function SignIn() {
     setError(null);
     setLoggingIn(true);
     try {
-      // signIn returns a promise that resolves once Supabase session is established
       await signIn(email, password);
       router.replace('/home');
     } catch (e) {
@@ -33,28 +32,22 @@ export default function SignIn() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, gap: space.xl, paddingTop: space.xxl }}>
         <View style={{ gap: 6 }}>
-          <AppText variant="display">Welcome back</AppText>
-          <AppText variant="body" color={colors.muted}>
-            Pick up where your study group left off.
-          </AppText>
+          <AppText variant="display">Your next chapter</AppText>
         </View>
 
-        {error ? (
-          <Card tone="flat">
-            <AppText variant="small" color={colors.text}>
-              {error}
-            </AppText>
-          </Card>
-        ) : null}
-
         <Card tone="tint">
-          <AppText variant="h3">Demo account</AppText>
-          <AppText variant="small" color={colors.muted}>
-            Use <AppText variant="small" color={colors.primary}>alex@northbridge.edu</AppText> and{' '}
-            <AppText variant="small" color={colors.primary}>demo1234</AppText>. Jamie and Maria are
-            already verified and waiting in your deck.
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
+            <AppText style={{ fontSize: 20 }}>✨</AppText>
+            <AppText variant="body">Small steps. Real progress.</AppText>
+          </View>
+          <AppText variant="body" color={colors.muted}>
+            One account for your tutor, study plan and buddies.
           </AppText>
         </Card>
+
+        <AppText variant="caption" color={colors.muted} align="center">
+          Sign in with your email
+        </AppText>
 
         <View style={{ gap: space.lg }}>
           <Input
@@ -74,8 +67,25 @@ export default function SignIn() {
           />
         </View>
 
+        <Card tone="flat">
+          <AppText variant="small">
+            <AppText style={{ fontWeight: '600' }}>Your school, your community</AppText>
+            {'\n'}We verify student status before enabling buddy discovery.
+          </AppText>
+        </Card>
+
         <Button label="Log in" onPress={submit} disabled={loggingIn} />
-        {loggingIn ? <ActivityIndicator color={colors.primary} style={{ marginTop: space.sm }} /> : null}
+        {loggingIn ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: space.sm }} />
+        ) : null}
+
+        {error ? (
+          <Card tone="flat">
+            <AppText variant="small" color={colors.danger}>
+              {error}
+            </AppText>
+          </Card>
+        ) : null}
 
         <View style={{ alignItems: 'center' }}>
           <Pressable onPress={() => router.push('/sign-up')}>

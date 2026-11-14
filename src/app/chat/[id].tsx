@@ -24,8 +24,8 @@ import {
   CATEGORY_META,
   CATEGORY_ORDER,
   deriveStage,
-  primarySuggestions,
   renderTemplate,
+  suggestReplies,
   templateByKey,
   templatesByCategory,
 } from '@/lib/templates';
@@ -93,7 +93,6 @@ export default function ChatScreen() {
   }
 
   const stage = deriveStage(messages, sessions);
-  const suggestions = primarySuggestions(stage, 5);
   const score = scoreFor(partner.profile.id);
   const defaultSubjectId =
     score?.sharedSubjectIds[0] ??
@@ -104,6 +103,15 @@ export default function ChatScreen() {
   const defaultSlot = firstSlot
     ? `${DAY_LABELS[firstSlot.day]} ${to12h(firstSlot.start)}–${to12h(firstSlot.end)}`
     : 'a time that works';
+  const suggestions = suggestReplies({
+    messages,
+    sessions,
+    currentUserId: currentStudent.profile.id,
+    stage,
+    hasAvailability: currentStudent.availability.length > 0,
+    hasSubject: Boolean(defaultSubjectId) || currentStudent.subjects.length > 0,
+    limit: 4,
+  });
 
   const send = (template: MessageTemplate, payload: MessagePayload = {}) => {
     sendMessage(match.id, template.key, payload);
@@ -308,7 +316,7 @@ export default function ChatScreen() {
         }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <AppText variant="label" color={colors.muted}>
-            SUGGESTED FOR THIS STAGE
+            SUGGESTED REPLIES
           </AppText>
           <Pressable
             onPress={() => setBrowserOpen(true)}

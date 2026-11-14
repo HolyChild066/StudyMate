@@ -1,10 +1,8 @@
 -- Seed demo auth users so the app can be tested with Supabase.
 -- Run AFTER 202610280001_init.sql and seed.sql.
 -- Password for all demo accounts: demo1234
--- Uses bcrypt hashing compatible with Supabase Auth.
+-- Requires: create extension if not exists pgcrypto;
 
--- Helper to create an auth user with a known password.
--- We insert into auth.users with the required columns.
 do $$
 declare
   alex_id uuid := '11111111-1111-1111-1111-111111111111';
@@ -15,38 +13,48 @@ declare
 begin
   pwd_hash := crypt('demo1234', gen_salt('bf'));
 
-  -- Alex
+  -- Insert auth users
   insert into auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, role, aud)
-  values (alex_id, '00000000-0000-0000-0000-000000000000', 'alex@northbridge.edu', pwd_hash, now(),
-    '{"name":"Alex Morgan","course":"BS Information Technology","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated')
-  on conflict (id) do nothing;
+  values
+    (alex_id, '00000000-0000-0000-0000-000000000000', 'alex@northbridge.edu', pwd_hash, now(),
+      '{"name":"Alex Morgan","course":"BS Information Technology","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated'),
+    (jamie_id, '00000000-0000-0000-0000-000000000000', 'jamie@northbridge.edu', pwd_hash, now(),
+      '{"name":"Jamie Cruz","course":"BS Information Technology","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated'),
+    (maria_id, '00000000-0000-0000-0000-000000000000', 'maria@northbridge.edu', pwd_hash, now(),
+      '{"name":"Maria Santos","course":"BS Computer Science","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated'),
+    (sam_id, '00000000-0000-0000-0000-000000000000', 'sam@northbridge.edu', pwd_hash, now(),
+      '{"name":"Sam Rivera","course":"BS Information Systems","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated')
+  on conflict (id) do update set
+    email = excluded.email,
+    encrypted_password = excluded.encrypted_password,
+    email_confirmed_at = excluded.email_confirmed_at,
+    raw_user_meta_data = excluded.raw_user_meta_data,
+    updated_at = now();
 
-  -- Jamie
-  insert into auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, role, aud)
-  values (jamie_id, '00000000-0000-0000-0000-000000000000', 'jamie@northbridge.edu', pwd_hash, now(),
-    '{"name":"Jamie Cruz","course":"BS Information Technology","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated')
-  on conflict (id) do nothing;
-
-  -- Maria
-  insert into auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, role, aud)
-  values (maria_id, '00000000-0000-0000-0000-000000000000', 'maria@northbridge.edu', pwd_hash, now(),
-    '{"name":"Maria Santos","course":"BS Computer Science","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated')
-  on conflict (id) do nothing;
-
-  -- Sam
-  insert into auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, role, aud)
-  values (sam_id, '00000000-0000-0000-0000-000000000000', 'sam@northbridge.edu', pwd_hash, now(),
-    '{"name":"Sam Rivera","course":"BS Information Systems","year":2}'::jsonb, now(), now(), 'authenticated', 'authenticated')
-  on conflict (id) do nothing;
+  -- Ensure profiles exist (trigger may not have fired if user already existed)
+  insert into public.profiles (id, name, email, course, year, verification, bio, study_pref, avatar_color, university)
+  values
+    (alex_id, 'Alex Morgan', 'alex@northbridge.edu', 'BS Information Technology', 2, 'approved',
+     'Second-year IT student. I like breaking code down until it finally clicks.', 'either', '#3B4FE0', 'Northbridge University'),
+    (jamie_id, 'Jamie Cruz', 'jamie@northbridge.edu', 'BS Information Technology', 2, 'approved',
+     'Databases make sense to me. Java does not. Let us trade notes.', 'either', '#FF5A4F', 'Northbridge University'),
+    (maria_id, 'Maria Santos', 'maria@northbridge.edu', 'BS Computer Science', 2, 'approved',
+     'I tutor ER diagrams at the library on Mondays. Bring your messy schema.', 'in_person', '#12B76A', 'Northbridge University'),
+    (sam_id, 'Sam Rivera', 'sam@northbridge.edu', 'BS Information Systems', 2, 'approved',
+     'Normalization, transactions, and quiet corners of the library.', 'online', '#8B5CF6', 'Northbridge University')
+  on conflict (id) do update set
+    name = excluded.name,
+    email = excluded.email,
+    course = excluded.course,
+    year = excluded.year,
+    verification = excluded.verification,
+    bio = excluded.bio,
+    study_pref = excluded.study_pref,
+    avatar_color = excluded.avatar_color,
+    university = excluded.university;
 end $$;
 
--- Set profiles to approved (handle_new_user trigger creates them as 'none')
-update public.profiles set verification = 'approved', bio = 'Second-year IT student. I like breaking code down until it finally clicks.', study_pref = 'either', avatar_color = '#3B4FE0' where id = '11111111-1111-1111-1111-111111111111';
-update public.profiles set verification = 'approved', bio = 'Databases make sense to me. Java does not. Let us trade notes.', study_pref = 'either', avatar_color = '#FF5A4F' where id = '22222222-2222-2222-2222-222222222222';
-update public.profiles set verification = 'approved', bio = 'I tutor ER diagrams at the library on Mondays. Bring your messy schema.', study_pref = 'in_person', avatar_color = '#12B76A' where id = '33333333-3333-3333-3333-333333333333';
-update public.profiles set verification = 'approved', bio = 'Normalization, transactions, and quiet corners of the library.', study_pref = 'online', avatar_color = '#8B5CF6' where id = '44444444-4444-4444-4444-444444444444';
-
--- Seed subjects (matching the local demo data)
+-- Seed subjects
 insert into public.profile_subjects (profile_id, subject_id, kind) values
   ('11111111-1111-1111-1111-111111111111', 'it102', 'can_help'),
   ('11111111-1111-1111-1111-111111111111', 'it103', 'can_help'),

@@ -8,9 +8,8 @@ import React, {
   useState,
 } from 'react';
 
-import { isBlocked, scoreCandidate } from './matching';
+import { isBlocked, scoreCandidate , buildDeck as buildDeckLocal } from './matching';
 import type { CandidateScore } from './matching';
-import { buildDeck as buildDeckLocal } from './matching';
 import { UNIVERSITY } from './subjects';
 import { isSupabaseConfigured, supabase } from './supabase';
 import type {
@@ -69,103 +68,7 @@ function pairKey(a: string, b: string): string {
   return [a, b].sort().join('::');
 }
 
-const seedStudents: Record<string, Student> = {
-  u_alex: {
-    profile: {
-      id: 'u_alex',
-      name: 'Alex Morgan',
-      email: 'alex@northbridge.edu',
-      course: 'BS Information Technology',
-      year: 2,
-      bio: 'Second-year IT student. I like breaking code down until it finally clicks.',
-      studyPref: 'either',
-      avatarColor: '#3B4FE0',
-      university: UNIVERSITY,
-      verification: 'approved',
-    },
-    subjects: [
-      { subjectId: 'it102', kind: 'can_help', level: 3 },
-      { subjectId: 'it103', kind: 'can_help', level: 2 },
-      { subjectId: 'it203', kind: 'need_help' },
-      { subjectId: 'it204', kind: 'want_study' },
-    ],
-    availability: [
-      { day: 1, start: '18:00', end: '21:00' },
-      { day: 3, start: '18:00', end: '21:00' },
-      { day: 6, start: '09:00', end: '12:00' },
-    ],
-  },
-  u_jamie: {
-    profile: {
-      id: 'u_jamie',
-      name: 'Jamie Cruz',
-      email: 'jamie@northbridge.edu',
-      course: 'BS Information Technology',
-      year: 2,
-      bio: 'Databases make sense to me. Java does not. Let us trade notes.',
-      studyPref: 'either',
-      avatarColor: '#FF5A4F',
-      university: UNIVERSITY,
-      verification: 'approved',
-    },
-    subjects: [
-      { subjectId: 'it203', kind: 'can_help', level: 3 },
-      { subjectId: 'it102', kind: 'need_help' },
-      { subjectId: 'it205', kind: 'want_study' },
-    ],
-    availability: [
-      { day: 2, start: '18:00', end: '21:00' },
-      { day: 4, start: '18:00', end: '21:00' },
-      { day: 6, start: '09:00', end: '12:00' },
-    ],
-  },
-  u_maria: {
-    profile: {
-      id: 'u_maria',
-      name: 'Maria Santos',
-      email: 'maria@northbridge.edu',
-      course: 'BS Computer Science',
-      year: 2,
-      bio: 'I tutor ER diagrams at the library on Mondays. Bring your messy schema.',
-      studyPref: 'in_person',
-      avatarColor: '#12B76A',
-      university: UNIVERSITY,
-      verification: 'approved',
-    },
-    subjects: [
-      { subjectId: 'it203', kind: 'can_help', level: 3 },
-      { subjectId: 'it204', kind: 'need_help' },
-      { subjectId: 'math101', kind: 'can_help', level: 2 },
-    ],
-    availability: [
-      { day: 1, start: '17:00', end: '20:00' },
-      { day: 3, start: '17:00', end: '20:00' },
-    ],
-  },
-  u_sam: {
-    profile: {
-      id: 'u_sam',
-      name: 'Sam Rivera',
-      email: 'sam@northbridge.edu',
-      course: 'BS Information Systems',
-      year: 2,
-      bio: 'Normalization, transactions, and quiet corners of the library.',
-      studyPref: 'online',
-      avatarColor: '#8B5CF6',
-      university: UNIVERSITY,
-      verification: 'approved',
-    },
-    subjects: [
-      { subjectId: 'it203', kind: 'can_help', level: 2 },
-      { subjectId: 'math101', kind: 'need_help' },
-      { subjectId: 'it101', kind: 'want_study' },
-    ],
-    availability: [
-      { day: 2, start: '19:00', end: '22:00' },
-      { day: 5, start: '14:00', end: '17:00' },
-    ],
-  },
-};
+const seedStudents: Record<string, Student> = {};
 
 function initialState(): AppState {
   return {
@@ -173,11 +76,7 @@ function initialState(): AppState {
     signedIn: false,
     currentUserId: null,
     students: seedStudents,
-    decisions: [
-      // Jamie already studied Alex back, so the very first "Study" tap
-      // demonstrates the mutual-match rule end to end.
-      { viewerId: 'u_jamie', targetId: 'u_alex', action: 'study', at: Date.now() - 3600_000 },
-    ],
+    decisions: [],
     matches: [],
     messages: [],
     sessions: [],
@@ -246,13 +145,13 @@ interface AppContextValue {
   updateProfile: (patch: Partial<Profile>) => void;
   saveSubjects: (entries: SubjectEntry[]) => void;
   saveAvailability: (blocks: Availability[]) => void;
-  decide: (targetId: string, action: DecisionAction) => string | null;
+  decide: (targetId: string, action: DecisionAction) => Promise<string | null>;
   submitPeerFeedback: (input: PeerFeedbackInput) => void;
   submitLearningProgress: (input: LearningProgressInput) => void;
   scoreFor: (targetId: string) => CandidateScore | null;
-  sendMessage: (matchId: string, templateKey: string, payload?: MessagePayload) => void;
-  createSession: (input: CreateSessionInput) => string;
-  setSessionStatus: (sessionId: string, status: SessionStatus) => void;
+  sendMessage: (matchId: string, templateKey: string, payload?: MessagePayload) => Promise<void>;
+  createSession: (input: CreateSessionInput) => Promise<string | null>;
+  setSessionStatus: (sessionId: string, status: SessionStatus) => Promise<void>;
   blockUser: (targetId: string) => void;
   reportUser: (input: ReportInput) => void;
   studentById: (id: string) => Student | undefined;
@@ -355,7 +254,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           sb.from('profile_subjects').select('*').eq('profile_id', uid),
           sb.from('availability').select('*').eq('profile_id', uid),
           sb.from('blocks').select('*').or(`blocker_id.eq.${uid},blocked_id.eq.${uid}`),
-          sb.from('decisions').select('*').eq('viewer_id', uid),
+          // Includes incoming 'study' decisions when RLS allows (see migration/policy fix).
+          sb.from('decisions').select('*').or(`viewer_id.eq.${uid},and(target_id.eq.${uid},action.eq.study)`),
           sb.from('matches').select('*').or(`user_a.eq.${uid},user_b.eq.${uid}`),
           sb.from('reports').select('*').eq('reporter_id', uid),
         ]);
@@ -567,6 +467,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const msg = payload.new as any;
         setState((s) => {
           if (s.messages.some((m) => m.id === msg.id)) return s;
+          const at = msg.created_at ? new Date(msg.created_at).getTime() : Date.now();
+          const payloadStr = JSON.stringify(msg.payload || {});
+          const isDup = s.messages.some((m) =>
+            m.matchId === msg.match_id &&
+            m.senderId === msg.sender_id &&
+            m.templateKey === msg.template_key &&
+            JSON.stringify(m.payload || {}) === payloadStr &&
+            Math.abs(m.at - at) < 10000
+          );
+          if (isDup) return s;
           return {
             ...s,
             messages: [...s.messages, {
@@ -575,7 +485,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               senderId: msg.sender_id,
               templateKey: msg.template_key,
               payload: msg.payload || {},
-              at: new Date(msg.created_at).getTime(),
+              at,
             }].sort((a, b) => a.at - b.at),
           };
         });
@@ -638,8 +548,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }, (payload: any) => {
         if (!mounted) return;
         const m = payload.new as any;
+        if (m.user_a !== uid && m.user_b !== uid) return;
+        let isNew = false;
         setState((s) => {
           if (s.matches.some((mm) => mm.id === m.id)) return s;
+          isNew = true;
           return {
             ...s,
             matches: [...s.matches, {
@@ -650,6 +563,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }],
           };
         });
+        if (isNew) {
+          Alert.alert('New study match! 🎉', 'You and your buddy both chose Study. Open Chats to start a guided conversation.');
+        }
       })
       .subscribe();
     channels.push(matchesChannel);
@@ -685,20 +601,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })();
     }
 
-    return Promise.resolve().then(() => {
-      setState((s) => {
-        const normalized = email.trim().toLowerCase();
-        const found =
-          Object.values(s.students).find(
-            (st) => st.profile.email.toLowerCase() === normalized,
-          ) ?? s.students['u_alex'];
-        return {
-          ...s,
-          signedIn: true,
-          currentUserId: found?.profile.id ?? 'u_alex',
-        };
-      });
-    });
+    return Promise.reject(
+      new Error('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env.'),
+    );
   }, []);
 
   const signUp = useCallback((input: SignUpInput, password?: string) => {
@@ -1016,7 +921,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const decide = useCallback(
-    (targetId: string, action: DecisionAction): string | null => {
+    async (targetId: string, action: DecisionAction): Promise<string | null> => {
       if (!state.currentUserId) return null;
       const me = state.currentUserId;
       let created: string | null = null;
@@ -1028,7 +933,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const exists = state.matches.some(
           (m) => pairKey(m.a, m.b) === pairKey(me, targetId),
         );
-        if (reciprocal && !exists) created = uid('match');
+        // Local optimistic match (offline/demo). In Supabase, the DB trigger creates the real match.
+        if (reciprocal && !exists && !isSupabaseConfigured) created = uid('match');
       }
 
       setState((s) => {
@@ -1046,9 +952,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (isSupabaseConfigured && supabase) {
-        void supabase
+        await supabase
           .from('decisions')
           .upsert({ viewer_id: me, target_id: targetId, action }, { onConflict: 'viewer_id,target_id' });
+
+        if (action === 'study') {
+          const [userA, userB] = [me, targetId].sort();
+          const { data: match } = await supabase
+            .from('matches')
+            .select('*')
+            .eq('user_a', userA)
+            .eq('user_b', userB)
+            .maybeSingle();
+          if (match?.id) {
+            const matchId = match.id as string;
+            setState((s) => {
+              if (s.matches.some((m) => m.id === matchId)) return s;
+              return {
+                ...s,
+                matches: [...s.matches, {
+                  id: matchId,
+                  a: match.user_a,
+                  b: match.user_b,
+                  at: match.created_at ? new Date(match.created_at).getTime() : Date.now(),
+                }],
+              };
+            });
+            return matchId;
+          }
+        }
       }
 
       return created;
@@ -1067,37 +999,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    (matchId: string, templateKey: string, payload: MessagePayload = {}) => {
+    async (matchId: string, templateKey: string, payload: MessagePayload = {}) => {
+      if (!state.currentUserId) return;
+      const localId = uid('msg');
+      const now = Date.now();
       setState((s) => {
         if (!s.currentUserId) return s;
         const message: ChatMessage = {
-          id: uid('msg'),
+          id: localId,
           matchId,
           senderId: s.currentUserId,
           templateKey,
           payload,
-          at: Date.now(),
+          at: now,
         };
         return { ...s, messages: [...s.messages, message] };
       });
       if (isSupabaseConfigured && supabase && state.currentUserId) {
-        void supabase.from('messages').insert({
+        const { data, error } = await supabase.from('messages').insert({
           match_id: matchId,
           sender_id: state.currentUserId,
           template_key: templateKey,
           payload,
-        });
+        }).select('*').single();
+        if (error) {
+          console.warn('sendMessage failed', error);
+          Alert.alert('Message not sent', error.message || 'Could not send message. Check that message templates are seeded and you are a match participant.');
+          setState((s) => ({ ...s, messages: s.messages.filter((m) => m.id !== localId) }));
+          return;
+        }
+        if (data?.id) {
+          const real = data as any;
+          setState((s) => ({
+            ...s,
+            messages: s.messages.map((m) =>
+              m.id === localId
+                ? {
+                    id: real.id,
+                    matchId: real.match_id,
+                    senderId: real.sender_id,
+                    templateKey: real.template_key,
+                    payload: real.payload || {},
+                    at: real.created_at ? new Date(real.created_at).getTime() : now,
+                  }
+                : m,
+            ),
+          }));
+        }
       }
     },
     [state.currentUserId],
   );
 
-  const createSession = useCallback((input: CreateSessionInput): string => {
-    const id = uid('session');
+  const createSession = useCallback(async (input: CreateSessionInput): Promise<string | null> => {
+    if (!state.currentUserId) return null;
+    const localId = uid('session');
+    const location = input.mode === 'online' ? 'Online' : 'University Library';
     setState((s) => {
       if (!s.currentUserId) return s;
       const session: StudySession = {
-        id,
+        id: localId,
         matchId: input.matchId,
         subjectId: input.subjectId,
         createdBy: s.currentUserId,
@@ -1105,15 +1066,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         start: input.start,
         end: input.end,
         mode: input.mode,
-        location: input.mode === 'online' ? 'Online' : 'University Library',
+        location,
         status: 'proposed',
         safetyAcknowledged: input.safetyAcknowledged,
       };
       return { ...s, sessions: [...s.sessions, session] };
     });
+
     if (isSupabaseConfigured && supabase && state.currentUserId) {
-      void supabase.from('study_sessions').insert({
-        id,
+      const { data, error } = await supabase.from('study_sessions').insert({
         match_id: input.matchId,
         subject_id: input.subjectId,
         created_by: state.currentUserId,
@@ -1121,21 +1082,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         start_time: input.start,
         end_time: input.end,
         mode: input.mode,
-        location: input.mode === 'online' ? 'Online' : 'University Library',
+        location,
         status: 'proposed',
         safety_acknowledged: input.safetyAcknowledged,
-      });
+      }).select('*').single();
+
+      if (error) {
+        console.warn('createSession failed', error);
+        Alert.alert('Session not sent', error.message || 'Could not create session. Check that the match exists and required data is valid.');
+        setState((s) => ({ ...s, sessions: s.sessions.filter((x) => x.id !== localId) }));
+        return null;
+      }
+
+      if (data?.id) {
+        const ses = data as any;
+        const realId = ses.id as string;
+        setState((s) => ({
+          ...s,
+          sessions: s.sessions.map((x) =>
+            x.id === localId
+              ? {
+                  id: realId,
+                  matchId: ses.match_id,
+                  subjectId: ses.subject_id,
+                  createdBy: ses.created_by,
+                  date: ses.session_date,
+                  start: typeof ses.start_time === 'string' ? ses.start_time.slice(0, 5) : x.start,
+                  end: typeof ses.end_time === 'string' ? ses.end_time.slice(0, 5) : x.end,
+                  mode: ses.mode,
+                  location: ses.location,
+                  status: ses.status,
+                  safetyAcknowledged: ses.safety_acknowledged,
+                }
+              : x,
+          ),
+        }));
+        return realId;
+      }
     }
-    return id;
+
+    return localId;
   }, [state.currentUserId]);
 
-  const setSessionStatus = useCallback((sessionId: string, status: SessionStatus) => {
+  const setSessionStatus = useCallback(async (sessionId: string, status: SessionStatus) => {
     setState((s) => ({
       ...s,
       sessions: s.sessions.map((x) => (x.id === sessionId ? { ...x, status } : x)),
     }));
     if (isSupabaseConfigured && supabase) {
-      void supabase.from('study_sessions').update({ status }).eq('id', sessionId);
+      const { error } = await supabase.from('study_sessions').update({ status }).eq('id', sessionId);
+      if (error) {
+        console.warn('setSessionStatus failed', error);
+        Alert.alert('Could not update session', error.message || 'The session status change was not saved.');
+      }
     }
   }, []);
 

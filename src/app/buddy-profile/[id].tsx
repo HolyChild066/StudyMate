@@ -168,8 +168,8 @@ export default function BuddyProfileScreen() {
             variant="secondary"
             style={{ flex: 1 }}
             icon={<X size={18} color={colors.text} />}
-            onPress={() => {
-              decide(other.profile.id, 'pass');
+            onPress={async () => {
+              await decide(other.profile.id, 'pass');
               router.back();
             }}
           />
@@ -177,8 +177,8 @@ export default function BuddyProfileScreen() {
             label="Study"
             style={{ flex: 1 }}
             icon={<Handshake size={18} color={colors.text} />}
-            onPress={() => {
-              const matchId = decide(other.profile.id, 'study');
+            onPress={async () => {
+              const matchId = await decide(other.profile.id, 'study');
               if (matchId) router.replace(`/match/${matchId}`);
               else setInfoOpen(true);
             }}

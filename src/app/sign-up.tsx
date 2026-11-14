@@ -1,21 +1,22 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 
-import { AppText, Button, Chip, Input, Screen } from '@/components/ui';
+import { AppText, Button, Card, Chip, Input, Screen } from '@/components/ui';
 import { useApp } from '@/lib/store';
 import { COURSES, YEARS } from '@/lib/subjects';
-import { colors, space } from '@/theme/tokens';
+import { colors, radius, space } from '@/theme/tokens';
 
 export default function SignUp() {
   const { signUp } = useApp();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [course, setCourse] = useState(COURSES[0]!);
   const [year, setYear] = useState(2);
 
-  const canSubmit = name.trim().length > 1 && email.includes('@') && password.length >= 8;
+  const canSubmit = name.trim().length > 1 && email.includes('@');
 
   const submit = () => {
     signUp({ name, email, course, year }, password);
@@ -29,30 +30,53 @@ export default function SignUp() {
         style={{ flex: 1, gap: space.xl, paddingTop: space.xxl }}>
         <View style={{ gap: 6 }}>
           <AppText variant="display">Create your account</AppText>
-          <AppText variant="body" color={colors.muted}>
-            One account for your subjects, buddies, and study sessions.
-          </AppText>
         </View>
 
         <View style={{ gap: space.lg }}>
-          <Input label="Full name" value={name} onChangeText={setName} placeholder="KJ Rivera" />
-          <Input
-            label="University email"
+          <LabeledInput
+            label="Full name"
+            value={name}
+            onChangeText={setName}
+            placeholder="KJ Rivera"
+          />
+          <LabeledInput
+            label="Email address"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
             placeholder="kj@northbridge.edu"
           />
-          <Input
-            label="Password"
+          <LabeledInput
+            label="Password · optional"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={!showPassword}
             placeholder="At least 8 characters"
-            hint="Your name is visible to buddies. Your email stays private."
+            trailing={
+              <Pressable onPress={() => setShowPassword((s) => !s)}>
+                <AppText variant="small" color={colors.primary}>
+                  {showPassword ? 'Hide' : 'Show'}
+                </AppText>
+              </Pressable>
+            }
           />
         </View>
+
+        <AppText variant="caption" color={colors.muted}>
+          At least 8 characters. Tap the eye to show or hide.
+        </AppText>
+
+        <Card tone="flat">
+          <AppText variant="small">
+            <AppText style={{ fontWeight: '600' }}>Prefer passwordless?</AppText>
+            {'\n'}You can skip the password and sign in with a one-time email code.
+          </AppText>
+        </Card>
+
+        <AppText variant="caption" color={colors.muted}>
+          Your name is visible to buddies. Your email stays private.
+        </AppText>
 
         <View style={{ gap: space.sm }}>
           <AppText variant="label" color={colors.muted}>
@@ -81,8 +105,56 @@ export default function SignUp() {
           </View>
         </View>
 
-        <Button label="Continue" onPress={submit} disabled={!canSubmit} />
+        <Button label="Send code" onPress={submit} disabled={!canSubmit} />
       </KeyboardAvoidingView>
     </Screen>
+  );
+}
+
+function LabeledInput({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  secureTextEntry,
+  autoCapitalize,
+  keyboardType,
+  trailing,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words';
+  keyboardType?: 'email-address';
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.md,
+        padding: space.md,
+        gap: space.xs,
+      }}>
+      <AppText variant="caption" color={colors.muted}>
+        {label}
+      </AppText>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+        <Input
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          secureTextEntry={secureTextEntry}
+          autoCapitalize={autoCapitalize}
+          keyboardType={keyboardType}
+          style={{ flex: 1, minHeight: 0, padding: 0, borderWidth: 0, backgroundColor: 'transparent' }}
+        />
+        {trailing}
+      </View>
+    </View>
   );
 }

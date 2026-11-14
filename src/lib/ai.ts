@@ -1,9 +1,39 @@
 import Constants from 'expo-constants';
 
-const API_KEY = (Constants.expoConfig?.extra?.ANTHROPIC_API_KEY as string) ?? process.env.ANTHROPIC_API_KEY ?? '';
-const MODEL = 'claude-sonnet-4-20250514';
+const OPENROUTER_API_KEY =
+  (Constants.expoConfig?.extra?.OPENROUTER_API_KEY as string) ||
+  process.env.OPENROUTER_API_KEY ||
+  process.env.EXPO_PUBLIC_OPENROUTER_API_KEY ||
+  '';
 
-export const isAIConfigured = Boolean(API_KEY);
+const GOOGLE_API_KEY =
+  (Constants.expoConfig?.extra?.GOOGLE_API_KEY as string) ||
+  (Constants.expoConfig?.extra?.GEMINI_API_KEY as string) ||
+  process.env.GOOGLE_API_KEY ||
+  process.env.GEMINI_API_KEY ||
+  process.env.EXPO_PUBLIC_GOOGLE_API_KEY ||
+  '';
+
+const ANTHROPIC_API_KEY =
+  (Constants.expoConfig?.extra?.ANTHROPIC_API_KEY as string) ||
+  process.env.ANTHROPIC_API_KEY ||
+  '';
+
+const OPENROUTER_MODELS = [
+  'nvidia/nemotron-3.5-lightning:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'nvidia/nemotron-3.5-super-vl:free',
+  'cohere/north-mini-code:free',
+  'recursive/flint-v1.0:free',
+];
+const GOOGLE_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-flash-latest',
+];
+const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+
+export const isAIConfigured = Boolean(OPENROUTER_API_KEY || GOOGLE_API_KEY || ANTHROPIC_API_KEY);
 
 export interface QuizQuestion {
   question: string;
@@ -29,20 +59,118 @@ export interface StudyPlan {
   entries: StudyPlanEntry[];
 }
 
-async function callClaude(systemPrompt: string, userPrompt: string): Promise<string> {
-  if (!API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY is not set. Add it to .env.');
+async function callOpenRouter(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY not set');
+  }
+
+  let lastError: Error | null = null;
+
+  for (const model of OPENROUTER_MODELS) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://studymate.app',
+          'X-Title': 'StudyMate',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 4096,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        lastError = new Error(`OpenRouter API error ${response.status} (${model}): ${body}`);
+        if (response.status === 404 || response.status === 429 || response.status === 503) continue;
+        throw lastError;
+      }
+
+      const data = await response.json();
+      const text = data.choices?.[0]?.message?.content ?? '';
+      if (!text) {
+        lastError = new Error(`Empty response from ${model}`);
+        continue;
+      }
+      return text.trim();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      continue;
+    }
+  }
+
+  throw lastError || new Error('All OpenRouter models failed');
+}
+
+async function callGoogle(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (!GOOGLE_API_KEY) {
+    throw new Error('GOOGLE_API_KEY not set');
+  }
+
+  let lastError: Error | null = null;
+
+  for (const model of GOOGLE_MODELS) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GOOGLE_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const body = await response.text();
+        lastError = new Error(`Google AI API error ${response.status} (${model}): ${body}`);
+        if (response.status === 404 || response.status === 503) continue;
+        throw lastError;
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      if (!text) {
+        lastError = new Error(`Empty response from ${model}`);
+        continue;
+      }
+      return text.trim();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      continue;
+    }
+  }
+
+  throw lastError || new Error('All Google AI models failed');
+}
+
+async function callAnthropic(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not set');
   }
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
+      'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: ANTHROPIC_MODEL,
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -58,6 +186,36 @@ async function callClaude(systemPrompt: string, userPrompt: string): Promise<str
   const text = data.content?.[0]?.text ?? '';
   return text.trim();
 }
+
+async function callAI(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (OPENROUTER_API_KEY) {
+    try {
+      return await callOpenRouter(systemPrompt, userPrompt);
+    } catch (err) {
+      if (GOOGLE_API_KEY) {
+        try { return await callGoogle(systemPrompt, userPrompt); } catch {}
+      }
+      if (ANTHROPIC_API_KEY) {
+        try { return await callAnthropic(systemPrompt, userPrompt); } catch {}
+      }
+      throw err;
+    }
+  }
+  if (GOOGLE_API_KEY) {
+    try {
+      return await callGoogle(systemPrompt, userPrompt);
+    } catch (err) {
+      if (ANTHROPIC_API_KEY) return await callAnthropic(systemPrompt, userPrompt);
+      throw err;
+    }
+  }
+  if (ANTHROPIC_API_KEY) {
+    return await callAnthropic(systemPrompt, userPrompt);
+  }
+  throw new Error('No AI API key configured. Add OPENROUTER_API_KEY, GOOGLE_API_KEY, or ANTHROPIC_API_KEY to .env');
+}
+
+const callClaude = callAI;
 
 export async function generateQuiz(
   subject: string,

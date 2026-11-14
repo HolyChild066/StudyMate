@@ -27,7 +27,8 @@ export default function BuddyScreen() {
     );
   }
 
-  const top = deck[0];
+  const filteredDeck = deck.filter((d) => d.student.profile.id !== currentStudent.profile.id);
+  const top = filteredDeck[0];
 
   if (!top) {
     return (
@@ -67,8 +68,8 @@ export default function BuddyScreen() {
     idsFor(other.subjects, 'need_help').includes(id),
   );
 
-  const handle = (action: 'pass' | 'study') => {
-    const matchId = decide(other.profile.id, action);
+  const handle = async (action: 'pass' | 'study') => {
+    const matchId = await decide(other.profile.id, action);
     if (matchId) {
       router.push(`/match/${matchId}`);
       return;
@@ -85,7 +86,7 @@ export default function BuddyScreen() {
       <View style={{ paddingTop: space.lg, gap: 6 }}>
         <AppText variant="h1">Find a buddy</AppText>
         <AppText variant="small" color={colors.muted}>
-          {deck.length} compatible {deck.length === 1 ? 'student' : 'students'} · ranked by academic fit
+          {filteredDeck.length} compatible {filteredDeck.length === 1 ? 'student' : 'students'} · ranked by academic fit
         </AppText>
       </View>
 
@@ -204,21 +205,21 @@ export default function BuddyScreen() {
           </Pressable>
         </Card>
 
-        {deck[1] ? (
+        {filteredDeck[1] ? (
           <View style={{ marginTop: space.lg, gap: space.sm }}>
             <AppText variant="label" color={colors.muted}>
               ALSO COMPATIBLE
             </AppText>
             <Card tone="flat" style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
               <Avatar
-                name={deck[1].student.profile.name}
-                color={deck[1].student.profile.avatarColor}
+                name={filteredDeck[1].student.profile.name}
+                color={filteredDeck[1].student.profile.avatarColor}
                 size={40}
               />
               <View style={{ flex: 1 }}>
-                <AppText variant="h3">{deck[1].student.profile.name}</AppText>
+                <AppText variant="h3">{filteredDeck[1].student.profile.name}</AppText>
                 <AppText variant="caption" color={colors.muted}>
-                  {Math.round(deck[1].score)}% match · {deck[1].student.profile.course.replace('BS ', '')}
+                  {Math.round(filteredDeck[1].score)}% match · {filteredDeck[1].student.profile.course.replace('BS ', '')}
                 </AppText>
               </View>
               <Pill label="Next" tone="neutral" />
